@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
 import LoginPage from "./pages/LoginPage";
 import LobbyPage from "./pages/LobbyPage";
+import RoomWaitingPage from "./pages/RoomWaitingPage";
 import ProfilePage from "./pages/ProfilePage";
 import GamePage from "./pages/GamePage";
 import LeaderboardPage from "./pages/LeaderboardPage";
@@ -25,6 +26,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<LoginPage />} />
             <Route path="/lobby" element={<LobbyPage />} />
+            <Route path="/room" element={<RoomWaitingPage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/game" element={<GamePage />} />
             <Route path="/leaderboard" element={<LeaderboardPage />} />

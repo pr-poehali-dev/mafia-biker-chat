@@ -93,7 +93,10 @@ export default function LobbyPage() {
                         Полная
                       </Button>
                     ) : (
-                      <Button className="bg-gradient-to-r from-biker-orange to-biker-flame">
+                      <Button 
+                        className="bg-gradient-to-r from-biker-orange to-biker-flame"
+                        onClick={() => navigate(`/room?id=${room.id}&name=${encodeURIComponent(room.name)}`)}
+                      >
                         <Icon name="LogIn" className="mr-2" size={18} />
                         Войти
                       </Button>

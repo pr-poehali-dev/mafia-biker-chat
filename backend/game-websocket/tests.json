@@ -1,0 +1,13 @@
+{
+  "tests": [
+    {
+      "name": "WebSocket message without action",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "action": "unknown"
+      },
+      "expectedStatus": 400
+    }
+  ]
+}

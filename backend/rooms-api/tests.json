@@ -1,0 +1,23 @@
+{
+  "tests": [
+    {
+      "name": "Get rooms list",
+      "method": "GET",
+      "path": "/",
+      "expectedStatus": 200
+    },
+    {
+      "name": "Create room without data returns error",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "name": "Test Room"
+      },
+      "expectedStatus": 400,
+      "expectedBody": {
+        "error": "string"
+      },
+      "bodyMatcher": "partial"
+    }
+  ]
+}
