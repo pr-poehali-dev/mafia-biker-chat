@@ -30,6 +30,13 @@ export default function LobbyPage() {
           </div>
           
           <div className="flex items-center gap-4">
+            <Button variant="outline" onClick={() => navigate('/shop')}>
+              <Icon name="ShoppingCart" className="mr-2" size={18} />
+              Магазин
+            </Button>
+            <Button variant="outline" onClick={() => navigate('/admin')}>
+              <Icon name="Shield" size={18} />
+            </Button>
             <Button variant="outline" onClick={() => navigate('/profile')}>
               <Icon name="User" className="mr-2" size={18} />
               {user?.first_name}

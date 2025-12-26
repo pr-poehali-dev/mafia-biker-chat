@@ -1,0 +1,16 @@
+{
+  "tests": [
+    {
+      "name": "OPTIONS request returns CORS headers",
+      "method": "OPTIONS",
+      "path": "/",
+      "expectedStatus": 200
+    },
+    {
+      "name": "GET shop items",
+      "method": "GET",
+      "path": "/?path=shop",
+      "expectedStatus": 200
+    }
+  ]
+}
