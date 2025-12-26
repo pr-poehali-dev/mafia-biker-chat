@@ -21,33 +21,31 @@ export default function LoginPage() {
       navigate('/lobby');
     }
 
+    (window as any).onTelegramAuth = async (user: any) => {
+      try {
+        const response = await fetch('https://functions.poehali.dev/fc7750dc-85bb-4878-8cf4-66b7110d39ba', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(user),
+        });
+
+        const data = await response.json();
+        if (data.user) {
+          login(data.user);
+          navigate('/lobby');
+        }
+      } catch (error) {
+        console.error('Auth error:', error);
+      }
+    };
+
     const script = document.createElement('script');
     script.src = 'https://telegram.org/js/telegram-widget.js?22';
-    script.setAttribute('data-telegram-login', 'YOUR_BOT_USERNAME');
+    script.setAttribute('data-telegram-login', 'MotoMafia_bot');
     script.setAttribute('data-size', 'large');
     script.setAttribute('data-onauth', 'onTelegramAuth(user)');
     script.setAttribute('data-request-access', 'write');
     script.async = true;
-
-    window.TelegramLoginWidget = {
-      dataOnauth: async (user: any) => {
-        try {
-          const response = await fetch('https://functions.poehali.dev/fc7750dc-85bb-4878-8cf4-66b7110d39ba', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(user),
-          });
-
-          const data = await response.json();
-          if (data.user) {
-            login(data.user);
-            navigate('/lobby');
-          }
-        } catch (error) {
-          console.error('Auth error:', error);
-        }
-      }
-    };
 
     const container = document.getElementById('telegram-login-container');
     if (container) {
