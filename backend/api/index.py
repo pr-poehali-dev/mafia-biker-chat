@@ -19,7 +19,7 @@ def check_admin(user_id, cur):
     return result and result[0]
 
 def handler(event: dict, context) -> dict:
-    '''Общий API для профилей, админки и магазина'''
+    '''Общий API для профилей, админки, магазина и игры'''
     method = event.get('httpMethod', 'GET')
     path = event.get('queryStringParameters', {}).get('path', '')
     
@@ -407,6 +407,16 @@ def handler(event: dict, context) -> dict:
         elif path == 'bonuses':
             from bonuses import handle_bonuses
             return handle_bonuses(event, cur, conn)
+        
+        # КОМНАТЫ
+        elif path == 'rooms':
+            from rooms import handle_rooms
+            return handle_rooms(event, cur, conn)
+        
+        # ИГРА
+        elif path == 'game':
+            from rooms import handle_game
+            return handle_game(event, cur, conn)
         
         cur.close()
         conn.close()

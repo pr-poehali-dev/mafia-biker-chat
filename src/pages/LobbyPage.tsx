@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -6,17 +6,35 @@ import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import Icon from '@/components/ui/icon';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import CreateRoomForm from '@/components/CreateRoomForm';
 
 export default function LobbyPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
 
-  const rooms = [
-    { id: 1, name: 'Ночные волки', players: '5/10', status: 'waiting' },
-    { id: 2, name: 'Гонка на выживание', players: '8/10', status: 'waiting' },
-    { id: 3, name: 'Hardcore мафия', players: '10/10', status: 'full' },
-  ];
+  const [rooms, setRooms] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadRooms();
+    const interval = setInterval(loadRooms, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const loadRooms = async () => {
+    try {
+      const response = await fetch('https://functions.poehali.dev/5c41a30e-4c90-4aed-9351-0dacd2291ebd?path=rooms');
+      const data = await response.json();
+      if (data.success) {
+        setRooms(data.rooms);
+      }
+    } catch (error) {
+      console.error('Failed to load rooms', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen concrete-bg">
@@ -76,41 +94,51 @@ export default function LobbyPage() {
             </div>
 
             <div className="grid gap-4">
-              {rooms.map((room) => (
-                <Card key={room.id} className="p-6 border-2 border-biker-orange/20 hover:border-biker-orange transition-all hover:spray-shadow animate-spray-paint">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <h3 className="text-xl font-heading font-bold text-foreground mb-2">
-                        {room.name}
-                      </h3>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <div className="flex items-center gap-2">
-                          <Icon name="Users" size={16} />
-                          <span>{room.players}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Icon name="Clock" size={16} />
-                          <span>Ожидание</span>
+              {loading ? (
+                <div className="text-center py-8 text-muted-foreground">Загрузка...</div>
+              ) : rooms.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">Нет активных комнат. Создай первую!</div>
+              ) : (
+                rooms.map((room) => (
+                  <Card key={room.id} className="p-6 border-2 border-biker-orange/20 hover:border-biker-orange transition-all hover:spray-shadow animate-spray-paint">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <h3 className="text-xl font-heading font-bold text-foreground mb-2">
+                          {room.name}
+                        </h3>
+                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                          <div className="flex items-center gap-2">
+                            <Icon name="Users" size={16} />
+                            <span>{room.current_players}/{room.max_players}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Icon name="Clock" size={16} />
+                            <span>{room.status === 'waiting' ? 'Ожидание' : 'В игре'}</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    {room.status === 'full' ? (
-                      <Button disabled variant="outline">
-                        Полная
-                      </Button>
-                    ) : (
-                      <Button 
-                        className="bg-gradient-to-r from-biker-orange to-biker-flame"
-                        onClick={() => navigate(`/room?id=${room.id}&name=${encodeURIComponent(room.name)}`)}
-                      >
-                        <Icon name="LogIn" className="mr-2" size={18} />
-                        Войти
-                      </Button>
-                    )}
-                  </div>
-                </Card>
-              ))}
+                      {room.status === 'in_game' ? (
+                        <Button disabled variant="outline">
+                          В игре
+                        </Button>
+                      ) : room.current_players >= room.max_players ? (
+                        <Button disabled variant="outline">
+                          Полная
+                        </Button>
+                      ) : (
+                        <Button 
+                          className="bg-gradient-to-r from-biker-orange to-biker-flame"
+                          onClick={() => navigate(`/room?id=${room.id}&name=${encodeURIComponent(room.name)}`)}
+                        >
+                          <Icon name="LogIn" className="mr-2" size={18} />
+                          Войти
+                        </Button>
+                      )}
+                    </div>
+                  </Card>
+                ))
+              )}
             </div>
           </TabsContent>
 
@@ -118,27 +146,7 @@ export default function LobbyPage() {
             <Card className="p-6 border-2 border-biker-cyan/20">
               <h3 className="text-2xl font-heading font-bold mb-6">Создать комнату</h3>
               
-              <div className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Название комнаты</label>
-                  <Input placeholder="Введи название..." />
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Максимум игроков</label>
-                  <Input type="number" min="6" max="20" defaultValue="10" />
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium mb-2 block">Пароль (необязательно)</label>
-                  <Input type="password" placeholder="Оставь пустым для открытой комнаты" />
-                </div>
-
-                <Button className="w-full bg-gradient-to-r from-biker-orange to-biker-flame text-lg py-6">
-                  <Icon name="Plus" className="mr-2" size={20} />
-                  Создать комнату
-                </Button>
-              </div>
+              <CreateRoomForm onSuccess={loadRooms} />
             </Card>
           </TabsContent>
         </Tabs>

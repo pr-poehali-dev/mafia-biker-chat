@@ -11,6 +11,12 @@
       "method": "GET",
       "path": "/?path=shop",
       "expectedStatus": 200
+    },
+    {
+      "name": "GET rooms list",
+      "method": "GET",
+      "path": "/?path=rooms",
+      "expectedStatus": 200
     }
   ]
 }
