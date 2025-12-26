@@ -17,7 +17,7 @@ export default function YandexCallbackPage() {
 
     const handleYandexAuth = async () => {
       try {
-        const redirectUri = `${window.location.origin}/auth/yandex/callback`;
+        const redirectUri = 'https://preview--mafia-biker-chat.poehali.dev/auth/yandex/callback';
         const response = await fetch('https://functions.poehali.dev/9e557f0f-c20f-4ff7-b370-7c13bbb9f321', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

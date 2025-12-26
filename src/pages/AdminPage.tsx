@@ -81,6 +81,23 @@ export default function AdminPage() {
     }
   };
 
+  const giveBonus = async (userId: number, bonusType: string) => {
+    try {
+      await fetch(`${API_URL}?path=bonuses`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Auth-Token': token || ''
+        },
+        body: JSON.stringify({ user_id: userId, bonus_type: bonusType, amount: 1 })
+      });
+      alert(`Бонус "${bonusType}" выдан!`);
+    } catch (error) {
+      console.error('Failed to give bonus:', error);
+      alert('Ошибка выдачи бонуса');
+    }
+  };
+
   const loadShopItems = async () => {
     try {
       const response = await fetch(`${API_URL}?path=shop`);
@@ -173,20 +190,33 @@ export default function AdminPage() {
             <CardContent>
               <div className="space-y-3 max-h-[500px] overflow-y-auto">
                 {users.map(user => (
-                  <div key={user.id} className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                    <div>
-                      <div className="font-semibold text-foreground">{user.profile_name}</div>
-                      <div className="text-sm text-muted-foreground">
-                        {user.first_name} • Rep: {user.reputation} • Lvl: {user.level}
+                  <div key={user.id} className="p-3 bg-muted rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <div className="font-semibold text-foreground">{user.profile_name}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {user.first_name} • Rep: {user.reputation} • Lvl: {user.level}
+                        </div>
                       </div>
+                      <Button
+                        size="sm"
+                        variant={user.is_admin ? 'destructive' : 'default'}
+                        onClick={() => toggleAdmin(user.id, !user.is_admin)}
+                      >
+                        {user.is_admin ? 'Убрать' : 'Сделать'} админом
+                      </Button>
                     </div>
-                    <Button
-                      size="sm"
-                      variant={user.is_admin ? 'destructive' : 'default'}
-                      onClick={() => toggleAdmin(user.id, !user.is_admin)}
-                    >
-                      {user.is_admin ? 'Убрать' : 'Сделать'} админом
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" onClick={() => giveBonus(user.id, 'documents')}>
+                        📄 Документы
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => giveBonus(user.id, 'shield')}>
+                        🛡️ Щит
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => giveBonus(user.id, 'privilege')}>
+                        👑 Привилегия
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>

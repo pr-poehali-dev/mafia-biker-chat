@@ -15,6 +15,7 @@ import ClansPage from "./pages/ClansPage";
 import YandexCallbackPage from "./pages/YandexCallbackPage";
 import AdminPage from "./pages/AdminPage";
 import ShopPage from "./pages/ShopPage";
+import BonusSelectPage from "./pages/BonusSelectPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -36,6 +37,7 @@ const App = () => (
             <Route path="/clans" element={<ClansPage />} />
             <Route path="/admin" element={<AdminPage />} />
             <Route path="/shop" element={<ShopPage />} />
+            <Route path="/bonus-select" element={<BonusSelectPage />} />
             <Route path="/auth/yandex/callback" element={<YandexCallbackPage />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />

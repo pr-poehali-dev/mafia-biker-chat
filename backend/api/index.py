@@ -71,7 +71,7 @@ def handler(event: dict, context) -> dict:
                 cur.execute('''
                     SELECT id, telegram_id, username, first_name, last_name, photo_url, 
                            reputation, level, total_games, wins, losses, profile_name, 
-                           is_admin, profile_created
+                           is_admin, profile_created, bonus_documents, bonus_shield, bonus_privilege
                     FROM users WHERE id = %s
                 ''', (user_id,))
                 
@@ -402,6 +402,11 @@ def handler(event: dict, context) -> dict:
                     'body': json.dumps({'success': True}),
                     'isBase64Encoded': False
                 }
+        
+        # БОНУСЫ
+        elif path == 'bonuses':
+            from bonuses import handle_bonuses
+            return handle_bonuses(event, cur, conn)
         
         cur.close()
         conn.close()

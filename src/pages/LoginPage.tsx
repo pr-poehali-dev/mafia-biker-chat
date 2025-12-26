@@ -57,7 +57,7 @@ export default function LoginPage() {
       alert('Яндекс авторизация не настроена. Добавьте YANDEX_CLIENT_ID в секреты проекта.');
       return;
     }
-    const redirectUri = `${window.location.origin}/auth/yandex/callback`;
+    const redirectUri = 'https://preview--mafia-biker-chat.poehali.dev/auth/yandex/callback';
     const authUrl = `https://oauth.yandex.ru/authorize?response_type=code&client_id=${YANDEX_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}`;
     window.location.href = authUrl;
   };
