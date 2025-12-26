@@ -11,7 +11,6 @@ interface CreateRoomFormProps {
 export default function CreateRoomForm({ onSuccess }: CreateRoomFormProps) {
   const { token } = useAuth();
   const [name, setName] = useState('');
-  const [maxPlayers, setMaxPlayers] = useState(10);
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -24,10 +23,7 @@ export default function CreateRoomForm({ onSuccess }: CreateRoomFormProps) {
       return;
     }
 
-    if (maxPlayers < 4 || maxPlayers > 20) {
-      setError('Минимум 4, максимум 20 игроков');
-      return;
-    }
+
 
     setLoading(true);
     setError('');
@@ -41,7 +37,7 @@ export default function CreateRoomForm({ onSuccess }: CreateRoomFormProps) {
         },
         body: JSON.stringify({
           name: name.trim(),
-          max_players: maxPlayers,
+          max_players: 20,
           password: password || null
         })
       });
@@ -71,17 +67,6 @@ export default function CreateRoomForm({ onSuccess }: CreateRoomFormProps) {
           value={name}
           onChange={(e) => setName(e.target.value)}
           maxLength={50}
-        />
-      </div>
-
-      <div>
-        <label className="text-sm font-medium mb-2 block">Максимум игроков (4-20)</label>
-        <Input 
-          type="number" 
-          min="4" 
-          max="20" 
-          value={maxPlayers}
-          onChange={(e) => setMaxPlayers(parseInt(e.target.value) || 10)}
         />
       </div>
 

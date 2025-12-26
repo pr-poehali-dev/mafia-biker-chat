@@ -68,10 +68,19 @@ def handle_rooms(event, cur, conn):
     
     if method == 'GET':
         cur.execute('''
-            SELECT id, name, password, max_players, current_players, status, created_by, created_at
-            FROM rooms
-            WHERE status IN ('waiting', 'in_game')
-            ORDER BY created_at DESC
+            DELETE FROM room_players 
+            WHERE last_seen < NOW() - INTERVAL '30 seconds'
+        ''')
+        
+        cur.execute('''
+            SELECT r.id, r.name, r.password, r.max_players, 
+                   COUNT(DISTINCT rp.user_id) as current_players, 
+                   r.status, r.created_by, r.created_at
+            FROM rooms r
+            LEFT JOIN room_players rp ON r.id = rp.room_id
+            WHERE r.status IN ('waiting', 'in_game')
+            GROUP BY r.id, r.name, r.password, r.max_players, r.status, r.created_by, r.created_at
+            ORDER BY r.created_at DESC
         ''')
         
         rooms_data = cur.fetchall()
@@ -88,6 +97,8 @@ def handle_rooms(event, cur, conn):
                 'created_by': room[6],
                 'created_at': room[7].isoformat() if room[7] else None
             })
+        
+        conn.commit()
         
         return {
             'statusCode': 200,
@@ -121,7 +132,7 @@ def handle_rooms(event, cur, conn):
         
         body = json.loads(event.get('body', '{}'))
         name = body.get('name', '').strip()
-        max_players = body.get('max_players', 10)
+        max_players = body.get('max_players', 20)
         password = body.get('password')
         
         if not name:
@@ -156,6 +167,236 @@ def handle_rooms(event, cur, conn):
             'isBase64Encoded': False
         }
 
+def handle_room(event, cur, conn):
+    '''Обработка действий в комнате'''
+    from utils import verify_token
+    
+    headers = event.get('headers', {})
+    token = headers.get('X-Auth-Token') or headers.get('x-auth-token')
+    
+    if not token:
+        return {
+            'statusCode': 401,
+            'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+            'body': json.dumps({'error': 'Missing auth token'}),
+            'isBase64Encoded': False
+        }
+    
+    user_id = verify_token(token)
+    if not user_id:
+        return {
+            'statusCode': 401,
+            'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+            'body': json.dumps({'error': 'Invalid token'}),
+            'isBase64Encoded': False
+        }
+    
+    action = event.get('queryStringParameters', {}).get('action', '')
+    method = event.get('httpMethod', 'GET')
+    
+    if action == 'join' and method == 'POST':
+        body = json.loads(event.get('body', '{}'))
+        room_id = body.get('room_id')
+        user_name = body.get('user_name', 'Guest')
+        
+        if not room_id:
+            return {
+                'statusCode': 400,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'error': 'Room ID required'}),
+                'isBase64Encoded': False
+            }
+        
+        cur.execute('SELECT created_by FROM rooms WHERE id = %s', (room_id,))
+        room = cur.fetchone()
+        
+        if not room:
+            return {
+                'statusCode': 404,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'error': 'Room not found'}),
+                'isBase64Encoded': False
+            }
+        
+        is_creator = room[0] == user_id
+        
+        cur.execute('''
+            INSERT INTO room_players (room_id, user_id, user_name, is_creator, last_seen)
+            VALUES (%s, %s, %s, %s, NOW())
+            ON CONFLICT (room_id, user_id) 
+            DO UPDATE SET last_seen = NOW()
+        ''', (room_id, user_id, user_name, is_creator))
+        
+        conn.commit()
+        
+        return {
+            'statusCode': 200,
+            'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+            'body': json.dumps({'success': True, 'is_creator': is_creator}),
+            'isBase64Encoded': False
+        }
+    
+    elif action == 'state' and method == 'GET':
+        room_id = event.get('queryStringParameters', {}).get('room_id')
+        
+        if not room_id:
+            return {
+                'statusCode': 400,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'error': 'Room ID required'}),
+                'isBase64Encoded': False
+            }
+        
+        cur.execute('''
+            UPDATE room_players 
+            SET last_seen = NOW() 
+            WHERE room_id = %s AND user_id = %s
+        ''', (room_id, user_id))
+        
+        cur.execute('''
+            DELETE FROM room_players 
+            WHERE room_id = %s AND last_seen < NOW() - INTERVAL '10 seconds'
+        ''', (room_id,))
+        
+        cur.execute('''
+            SELECT user_id, user_name, is_creator
+            FROM room_players
+            WHERE room_id = %s
+            ORDER BY joined_at
+        ''', (room_id,))
+        
+        players = []
+        for p in cur.fetchall():
+            players.append({
+                'user_id': p[0],
+                'user_name': p[1],
+                'is_creator': p[2]
+            })
+        
+        cur.execute('''
+            SELECT user_name, message, created_at
+            FROM room_chat
+            WHERE room_id = %s
+            ORDER BY created_at DESC
+            LIMIT 50
+        ''', (room_id,))
+        
+        chat = []
+        for c in cur.fetchall():
+            chat.append({
+                'user_name': c[0],
+                'message': c[1],
+                'created_at': c[2].isoformat() if c[2] else None
+            })
+        
+        chat.reverse()
+        
+        cur.execute('''
+            SELECT active_session_id, status 
+            FROM rooms 
+            WHERE id = %s
+        ''', (room_id,))
+        
+        room_data = cur.fetchone()
+        game_started = False
+        session_id = None
+        
+        if room_data and room_data[0]:
+            session_id = room_data[0]
+            game_started = True
+        
+        conn.commit()
+        
+        return {
+            'statusCode': 200,
+            'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+            'body': json.dumps({
+                'success': True, 
+                'players': players, 
+                'chat': chat,
+                'game_started': game_started,
+                'session_id': session_id
+            }),
+            'isBase64Encoded': False
+        }
+    
+    elif action == 'chat' and method == 'POST':
+        body = json.loads(event.get('body', '{}'))
+        room_id = body.get('room_id')
+        message = body.get('message', '').strip()
+        
+        if not room_id or not message:
+            return {
+                'statusCode': 400,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'error': 'Room ID and message required'}),
+                'isBase64Encoded': False
+            }
+        
+        cur.execute('''
+            SELECT user_name FROM room_players 
+            WHERE room_id = %s AND user_id = %s
+        ''', (room_id, user_id))
+        
+        player = cur.fetchone()
+        
+        if not player:
+            return {
+                'statusCode': 403,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'error': 'Not in room'}),
+                'isBase64Encoded': False
+            }
+        
+        user_name = player[0]
+        
+        cur.execute('''
+            INSERT INTO room_chat (room_id, user_id, user_name, message)
+            VALUES (%s, %s, %s, %s)
+        ''', (room_id, user_id, user_name, message))
+        
+        conn.commit()
+        
+        return {
+            'statusCode': 200,
+            'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+            'body': json.dumps({'success': True}),
+            'isBase64Encoded': False
+        }
+    
+    elif action == 'leave' and method == 'POST':
+        body = json.loads(event.get('body', '{}'))
+        room_id = body.get('room_id')
+        
+        if not room_id:
+            return {
+                'statusCode': 400,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'error': 'Room ID required'}),
+                'isBase64Encoded': False
+            }
+        
+        cur.execute('''
+            DELETE FROM room_players 
+            WHERE room_id = %s AND user_id = %s
+        ''', (room_id, user_id))
+        
+        conn.commit()
+        
+        return {
+            'statusCode': 200,
+            'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+            'body': json.dumps({'success': True}),
+            'isBase64Encoded': False
+        }
+    
+    return {
+        'statusCode': 400,
+        'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+        'body': json.dumps({'error': 'Unknown action'}),
+        'isBase64Encoded': False
+    }
+
 def handle_game(event, cur, conn):
     '''Обработка игровых действий'''
     method = event.get('httpMethod', 'GET')
@@ -183,7 +424,7 @@ def handle_game(event, cur, conn):
             'isBase64Encoded': False
         }
     
-    if action == 'start':
+    if action == 'start' and method == 'POST':
         body = json.loads(event.get('body', '{}'))
         room_id = body.get('room_id')
         
@@ -195,18 +436,17 @@ def handle_game(event, cur, conn):
                 'isBase64Encoded': False
             }
         
-        cur.execute('SELECT id, current_players FROM rooms WHERE id = %s', (room_id,))
-        room = cur.fetchone()
+        cur.execute('''
+            SELECT user_id, user_name 
+            FROM room_players 
+            WHERE room_id = %s
+        ''', (room_id,))
         
-        if not room:
-            return {
-                'statusCode': 404,
-                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
-                'body': json.dumps({'error': 'Room not found'}),
-                'isBase64Encoded': False
-            }
+        players = []
+        for p in cur.fetchall():
+            players.append({'user_id': p[0], 'user_name': p[1]})
         
-        if room[1] < 4:
+        if len(players) < 4:
             return {
                 'statusCode': 400,
                 'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
@@ -222,7 +462,19 @@ def handle_game(event, cur, conn):
         
         session_id = cur.fetchone()[0]
         
-        cur.execute('UPDATE rooms SET status = %s WHERE id = %s', ('in_game', room_id))
+        player_roles = distribute_roles(players)
+        
+        for pr in player_roles:
+            cur.execute('''
+                INSERT INTO session_players (session_id, user_id, role, is_alive)
+                VALUES (%s, %s, %s, %s)
+            ''', (session_id, pr['user_id'], pr['role'], pr['is_alive']))
+        
+        cur.execute('''
+            UPDATE rooms 
+            SET status = %s, active_session_id = %s 
+            WHERE id = %s
+        ''', ('in_game', session_id, room_id))
         
         conn.commit()
         
@@ -233,7 +485,7 @@ def handle_game(event, cur, conn):
             'isBase64Encoded': False
         }
     
-    elif action == 'vote':
+    elif action == 'vote' and method == 'POST':
         body = json.loads(event.get('body', '{}'))
         session_id = body.get('session_id')
         target_id = body.get('target_id')
@@ -260,6 +512,11 @@ def handle_game(event, cur, conn):
             }
         
         phase, day_number = game
+        
+        cur.execute('''
+            DELETE FROM votes 
+            WHERE session_id = %s AND voter_id = %s AND day_number = %s AND phase = %s
+        ''', (session_id, user_id, day_number, phase))
         
         cur.execute('''
             INSERT INTO votes (session_id, voter_id, target_id, phase, day_number)

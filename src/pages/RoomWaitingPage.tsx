@@ -1,7 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { useGameRoom } from '@/hooks/useGameRoom';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -9,50 +8,177 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import Icon from '@/components/ui/icon';
 
+const API_URL = 'https://functions.poehali.dev/5c41a30e-4c90-4aed-9351-0dacd2291ebd';
+
+interface Player {
+  user_id: number;
+  user_name: string;
+  is_creator: boolean;
+}
+
+interface ChatMessage {
+  user_name: string;
+  message: string;
+  created_at: string;
+}
+
 export default function RoomWaitingPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const [message, setMessage] = useState('');
 
-  const roomId = searchParams.get('id') || '1';
+  const roomId = searchParams.get('id');
   const roomName = searchParams.get('name') || 'Комната';
 
-  const {
-    isConnected,
-    players,
-    gameState,
-    chatMessages,
-    sendChatMessage,
-    startGame,
-    leaveRoom,
-  } = useGameRoom(
-    roomId,
-    user?.id || 0,
-    user?.first_name || 'Guest'
-  );
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [isConnected, setIsConnected] = useState(true);
+  const [isCreator, setIsCreator] = useState(false);
+  const [gameStarted, setGameStarted] = useState(false);
 
-  const handleSendMessage = () => {
-    if (message.trim()) {
-      sendChatMessage(message);
-      setMessage('');
+  useEffect(() => {
+    if (!roomId || !user) {
+      navigate('/lobby');
+      return;
+    }
+
+    joinRoom();
+    const interval = setInterval(loadRoomState, 1000);
+
+    return () => {
+      clearInterval(interval);
+      leaveRoom();
+    };
+  }, [roomId, user]);
+
+  const joinRoom = async () => {
+    try {
+      const response = await fetch(`${API_URL}?path=room&action=join`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Auth-Token': token || ''
+        },
+        body: JSON.stringify({
+          room_id: parseInt(roomId || '0'),
+          user_name: user?.profile_name || user?.first_name || 'Guest'
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        setIsCreator(data.is_creator || false);
+        loadRoomState();
+      }
+    } catch (error) {
+      console.error('Failed to join room', error);
+      setIsConnected(false);
     }
   };
 
-  const handleStartGame = () => {
-    startGame();
-    navigate(`/game?room=${roomId}`);
+  const loadRoomState = async () => {
+    try {
+      const response = await fetch(`${API_URL}?path=room&action=state&room_id=${roomId}`, {
+        headers: {
+          'X-Auth-Token': token || ''
+        }
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        setPlayers(data.players || []);
+        setChatMessages(data.chat || []);
+        
+        if (data.game_started && data.session_id) {
+          setGameStarted(true);
+          navigate(`/game?session=${data.session_id}`);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load room state', error);
+      setIsConnected(false);
+    }
+  };
+
+  const sendMessage = async () => {
+    if (!message.trim()) return;
+
+    try {
+      const response = await fetch(`${API_URL}?path=room&action=chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Auth-Token': token || ''
+        },
+        body: JSON.stringify({
+          room_id: parseInt(roomId || '0'),
+          message: message.trim()
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        setMessage('');
+        loadRoomState();
+      }
+    } catch (error) {
+      console.error('Failed to send message', error);
+    }
+  };
+
+  const handleStartGame = async () => {
+    if (players.length < 4) {
+      alert('Минимум 4 игрока для начала игры!');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}?path=game&action=start`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Auth-Token': token || ''
+        },
+        body: JSON.stringify({
+          room_id: parseInt(roomId || '0')
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success && data.session_id) {
+        navigate(`/game?session=${data.session_id}`);
+      }
+    } catch (error) {
+      console.error('Failed to start game', error);
+    }
+  };
+
+  const leaveRoom = async () => {
+    try {
+      await fetch(`${API_URL}?path=room&action=leave`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Auth-Token': token || ''
+        },
+        body: JSON.stringify({
+          room_id: parseInt(roomId || '0')
+        })
+      });
+    } catch (error) {
+      console.error('Failed to leave room', error);
+    }
   };
 
   const handleLeave = () => {
     leaveRoom();
     navigate('/lobby');
   };
-
-  if (gameState) {
-    navigate(`/game?room=${roomId}`);
-    return null;
-  }
 
   return (
     <div className="min-h-screen concrete-bg">
@@ -81,10 +207,10 @@ export default function RoomWaitingPage() {
             <Card className="p-6 border-2 border-biker-orange">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-heading font-bold">
-                  Игроки ({players.length}/10)
+                  Игроки ({players.length})
                 </h2>
                 
-                {players.length >= 6 && (
+                {isCreator && players.length >= 4 && (
                   <Button 
                     className="bg-gradient-to-r from-biker-orange to-biker-flame"
                     onClick={handleStartGame}
@@ -95,8 +221,14 @@ export default function RoomWaitingPage() {
                 )}
               </div>
 
+              {players.length < 4 && (
+                <div className="mb-4 p-3 bg-biker-orange/10 border border-biker-orange/30 rounded-lg text-sm text-center">
+                  Ожидаем игроков... Минимум 4 для начала игры
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-3">
-                {players.map((player, index) => (
+                {players.map((player) => (
                   <div
                     key={player.user_id}
                     className="p-4 rounded-lg border-2 border-border bg-card hover:border-biker-cyan transition-all"
@@ -107,25 +239,13 @@ export default function RoomWaitingPage() {
                         <AvatarFallback>{player.user_name[0]}</AvatarFallback>
                       </Avatar>
                       <div className="flex-1">
-                        <div className="font-heading font-bold">{player.user_name}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {player.ready ? '✅ Готов' : '⏳ Ожидает'}
+                        <div className="font-heading font-bold flex items-center gap-2">
+                          {player.user_name}
+                          {player.is_creator && <span className="text-xs">👑</span>}
                         </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-
-                {Array.from({ length: Math.max(0, 10 - players.length) }).map((_, i) => (
-                  <div
-                    key={`empty-${i}`}
-                    className="p-4 rounded-lg border-2 border-dashed border-muted bg-muted/5"
-                  >
-                    <div className="flex items-center gap-3 opacity-30">
-                      <div className="w-10 h-10 rounded-full bg-muted" />
-                      <div className="flex-1">
-                        <div className="h-4 bg-muted rounded w-20 mb-1" />
-                        <div className="h-3 bg-muted rounded w-16" />
+                        <div className="text-xs text-green-500">
+                          ✅ Готов
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -174,9 +294,9 @@ export default function RoomWaitingPage() {
                   placeholder="Напиши сообщение..."
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                  onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
                 />
-                <Button onClick={handleSendMessage}>
+                <Button onClick={sendMessage}>
                   <Icon name="Send" size={18} />
                 </Button>
               </div>

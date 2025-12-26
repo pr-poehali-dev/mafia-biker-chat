@@ -413,10 +413,20 @@ def handler(event: dict, context) -> dict:
             from rooms import handle_rooms
             return handle_rooms(event, cur, conn)
         
+        # КОМНАТА (действия внутри)
+        elif path == 'room':
+            from rooms import handle_room
+            return handle_room(event, cur, conn)
+        
         # ИГРА
         elif path == 'game':
-            from rooms import handle_game
-            return handle_game(event, cur, conn)
+            action = event.get('queryStringParameters', {}).get('action', '')
+            if action == 'state':
+                from game_state import handle_game_state
+                return handle_game_state(event, cur, conn)
+            else:
+                from rooms import handle_game
+                return handle_game(event, cur, conn)
         
         cur.close()
         conn.close()
