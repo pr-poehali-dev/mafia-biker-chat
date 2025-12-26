@@ -16,7 +16,8 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
-  login: (userData: User) => void;
+  token: string | null;
+  login: (userData: User, authToken: string) => void;
   logout: () => void;
   isAuthenticated: boolean;
 }
@@ -25,26 +26,33 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(null);
 
   useEffect(() => {
     const savedUser = localStorage.getItem('mafia_user');
-    if (savedUser) {
+    const savedToken = localStorage.getItem('mafia_token');
+    if (savedUser && savedToken) {
       setUser(JSON.parse(savedUser));
+      setToken(savedToken);
     }
   }, []);
 
-  const login = (userData: User) => {
+  const login = (userData: User, authToken: string) => {
     setUser(userData);
+    setToken(authToken);
     localStorage.setItem('mafia_user', JSON.stringify(userData));
+    localStorage.setItem('mafia_token', authToken);
   };
 
   const logout = () => {
     setUser(null);
+    setToken(null);
     localStorage.removeItem('mafia_user');
+    localStorage.removeItem('mafia_token');
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isAuthenticated: !!user }}>
+    <AuthContext.Provider value={{ user, token, login, logout, isAuthenticated: !!user }}>
       {children}
     </AuthContext.Provider>
   );

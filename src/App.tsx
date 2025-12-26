@@ -12,6 +12,7 @@ import ProfilePage from "./pages/ProfilePage";
 import GamePage from "./pages/GamePage";
 import LeaderboardPage from "./pages/LeaderboardPage";
 import ClansPage from "./pages/ClansPage";
+import YandexCallbackPage from "./pages/YandexCallbackPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -31,6 +32,7 @@ const App = () => (
             <Route path="/game" element={<GamePage />} />
             <Route path="/leaderboard" element={<LeaderboardPage />} />
             <Route path="/clans" element={<ClansPage />} />
+            <Route path="/auth/yandex/callback" element={<YandexCallbackPage />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

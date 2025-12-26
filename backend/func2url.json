@@ -1,4 +1,5 @@
 {
+  "yandex-auth": "https://functions.poehali.dev/9e557f0f-c20f-4ff7-b370-7c13bbb9f321",
   "rooms-api": "https://functions.poehali.dev/179087a4-bb9f-4a80-8c63-d916b65bbcec",
   "game-websocket": "https://functions.poehali.dev/5824c606-b36a-438b-8f5f-78752f089f37",
   "telegram-auth": "https://functions.poehali.dev/fc7750dc-85bb-4878-8cf4-66b7110d39ba"

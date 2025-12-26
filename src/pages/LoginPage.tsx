@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,14 @@ declare global {
 export default function LoginPage() {
   const navigate = useNavigate();
   const { login, isAuthenticated } = useAuth();
+  const [yandexAuthUrl, setYandexAuthUrl] = useState('');
+
+  useEffect(() => {
+    const clientId = '7d79e0b08e884c5381a89f7f5a57b8d0';
+    const redirectUri = `${window.location.origin}/auth/yandex/callback`;
+    const authUrl = `https://oauth.yandex.ru/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}`;
+    setYandexAuthUrl(authUrl);
+  }, []);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -30,8 +38,8 @@ export default function LoginPage() {
         });
 
         const data = await response.json();
-        if (data.user) {
-          login(data.user);
+        if (data.user && data.token) {
+          login(data.user, data.token);
           navigate('/lobby');
         }
       } catch (error) {
@@ -83,7 +91,25 @@ export default function LoginPage() {
 
             <div id="telegram-login-container" className="flex justify-center"></div>
 
-            <div className="pt-4 border-t border-border">
+            <div className="relative my-6">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t border-border" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-card px-2 text-muted-foreground">или</span>
+              </div>
+            </div>
+
+            <Button
+              onClick={() => window.location.href = yandexAuthUrl}
+              className="w-full bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white font-heading font-semibold py-6 text-lg"
+              size="lg"
+            >
+              <Icon name="UserCircle" className="mr-2" size={24} />
+              Войти через Яндекс ID
+            </Button>
+
+            <div className="pt-4 border-t border-border mt-6">
               <div className="flex items-start gap-3 text-sm text-muted-foreground">
                 <Icon name="Info" className="mt-0.5 flex-shrink-0" size={16} />
                 <p>

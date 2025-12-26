@@ -1,14 +1,12 @@
 import json
 import os
-import hashlib
-import hmac
 from datetime import datetime, timedelta
-from urllib.parse import parse_qs
 import psycopg2
 import jwt
+import requests
 
 def handler(event: dict, context) -> dict:
-    '''API для авторизации через Telegram Widget'''
+    '''API для авторизации через Яндекс ID'''
     method = event.get('httpMethod', 'GET')
     
     if method == 'OPTIONS':
@@ -36,51 +34,67 @@ def handler(event: dict, context) -> dict:
                 }
             body = json.loads(body_str)
             
-            telegram_id = body.get('id')
-            username = body.get('username', '')
-            first_name = body.get('first_name', '')
-            last_name = body.get('last_name', '')
-            photo_url = body.get('photo_url', '')
-            auth_date = body.get('auth_date')
-            hash_value = body.get('hash')
+            code = body.get('code')
+            redirect_uri = body.get('redirect_uri')
             
-            if not telegram_id or not hash_value:
+            if not code or not redirect_uri:
                 return {
                     'statusCode': 400,
                     'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
-                    'body': json.dumps({'error': 'Missing required fields'}),
+                    'body': json.dumps({'error': 'Missing code or redirect_uri'}),
                     'isBase64Encoded': False
                 }
             
-            bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
-            if not bot_token:
+            client_id = os.environ.get('YANDEX_CLIENT_ID')
+            client_secret = os.environ.get('YANDEX_CLIENT_SECRET')
+            jwt_secret = os.environ.get('JWT_SECRET')
+            
+            if not client_id or not client_secret or not jwt_secret:
                 return {
                     'statusCode': 500,
                     'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
-                    'body': json.dumps({'error': 'Bot token not configured'}),
+                    'body': json.dumps({'error': 'OAuth credentials not configured'}),
                     'isBase64Encoded': False
                 }
             
-            check_data = {
-                'id': str(telegram_id),
-                'first_name': first_name,
-                'username': username,
-                'photo_url': photo_url,
-                'auth_date': str(auth_date)
-            }
-            check_data = {k: v for k, v in check_data.items() if v}
+            token_response = requests.post('https://oauth.yandex.ru/token', data={
+                'grant_type': 'authorization_code',
+                'code': code,
+                'client_id': client_id,
+                'client_secret': client_secret,
+                'redirect_uri': redirect_uri
+            })
             
-            data_check_string = '\n'.join([f'{k}={v}' for k, v in sorted(check_data.items())])
-            secret_key = hashlib.sha256(bot_token.encode()).digest()
-            calculated_hash = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
-            
-            if calculated_hash != hash_value:
+            if token_response.status_code != 200:
                 return {
                     'statusCode': 401,
                     'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
-                    'body': json.dumps({'error': 'Invalid authentication'}),
+                    'body': json.dumps({'error': 'Failed to exchange code for token'}),
                     'isBase64Encoded': False
                 }
+            
+            access_token = token_response.json().get('access_token')
+            
+            user_info_response = requests.get('https://login.yandex.ru/info', headers={
+                'Authorization': f'OAuth {access_token}'
+            })
+            
+            if user_info_response.status_code != 200:
+                return {
+                    'statusCode': 401,
+                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                    'body': json.dumps({'error': 'Failed to get user info'}),
+                    'isBase64Encoded': False
+                }
+            
+            yandex_user = user_info_response.json()
+            yandex_id = yandex_user.get('id')
+            username = yandex_user.get('login', '')
+            first_name = yandex_user.get('first_name', '')
+            last_name = yandex_user.get('last_name', '')
+            photo_url = yandex_user.get('default_avatar_id', '')
+            if photo_url:
+                photo_url = f'https://avatars.yandex.net/get-yapic/{photo_url}/islands-200'
             
             db_url = os.environ.get('DATABASE_URL')
             conn = psycopg2.connect(db_url)
@@ -97,7 +111,7 @@ def handler(event: dict, context) -> dict:
                     photo_url = EXCLUDED.photo_url,
                     last_login = CURRENT_TIMESTAMP
                 RETURNING id, telegram_id, username, first_name, last_name, photo_url, reputation, level, total_games, wins, losses
-            ''', (telegram_id, username, first_name, last_name, photo_url))
+            ''', (int(yandex_id), username, first_name, last_name, photo_url))
             
             user = cur.fetchone()
             conn.commit()
@@ -118,19 +132,10 @@ def handler(event: dict, context) -> dict:
                 'losses': user[10]
             }
             
-            jwt_secret = os.environ.get('JWT_SECRET')
-            if not jwt_secret:
-                return {
-                    'statusCode': 500,
-                    'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
-                    'body': json.dumps({'error': 'JWT secret not configured'}),
-                    'isBase64Encoded': False
-                }
-            
             token = jwt.encode(
                 {
                     'user_id': user[0],
-                    'telegram_id': user[1],
+                    'yandex_id': user[1],
                     'exp': datetime.utcnow() + timedelta(days=30)
                 },
                 jwt_secret,
